@@ -7,3 +7,4 @@ target
 
 .vscode
 **/*/test_snapshots
+wave-*.md
