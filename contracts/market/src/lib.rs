@@ -53,7 +53,7 @@ pub enum DataKey {
     JobCounter,
     RegistryContract,
     Admin,
-    IsPaused
+    IsPaused,
 }
 
 #[contractevent]
@@ -120,11 +120,18 @@ pub struct AdminTransferred {
 
 #[contractevent]
 pub struct PauseStateChanged {
-    pub paused: bool
+    pub paused: bool,
 }
 
 #[contract]
 pub struct MarketContract;
+
+pub fn is_paused(env: &Env) -> bool {
+    env.storage()
+        .instance()
+        .get(&DataKey::IsPaused)
+        .expect("Missing storage variable")
+}
 
 #[contractimpl]
 impl MarketContract {
@@ -143,6 +150,7 @@ impl MarketContract {
     }
 
     pub fn create_job(env: Env, finder: Address, token: Address, amount: i128) -> u64 {
+        assert!(!is_paused(&env), "Contract Paused");
         finder.require_auth();
 
         let token_client = token::TokenClient::new(&env, &token);
@@ -175,6 +183,7 @@ impl MarketContract {
     }
 
     pub fn assign_artisan(env: Env, finder: Address, job_id: u64, artisan: Address) {
+        assert!(!is_paused(&env), "Contract Paused");
         let registry_contract: Address = env
             .storage()
             .instance()
@@ -220,6 +229,7 @@ impl MarketContract {
     }
 
     pub fn apply_for_job(env: Env, artisan: Address, job_id: u64) {
+        assert!(!is_paused(&env), "Contract Paused");
         artisan.require_auth();
 
         let registry_contract: Address = env
@@ -256,6 +266,7 @@ impl MarketContract {
     }
 
     pub fn start_job(env: Env, artisan: Address, job_id: u64) {
+        assert!(!is_paused(&env), "Contract Paused");
         artisan.require_auth();
 
         let mut job: Job = env
@@ -285,6 +296,7 @@ impl MarketContract {
     }
 
     pub fn cancel_job(env: Env, finder: Address, job_id: u64) {
+        assert!(!is_paused(&env), "Contract Paused");
         finder.require_auth();
 
         let mut job: Job = env
@@ -312,6 +324,7 @@ impl MarketContract {
     }
 
     pub fn complete_job(env: Env, artisan: Address, job_id: u64) {
+        assert!(!is_paused(&env), "Contract Paused");
         artisan.require_auth();
 
         let mut job: Job = env
@@ -341,6 +354,7 @@ impl MarketContract {
     }
 
     pub fn auto_release_funds(env: Env, artisan: Address, job_id: u64) {
+        assert!(!is_paused(&env), "Contract Paused");
         artisan.require_auth();
 
         let mut job: Job = env
@@ -381,6 +395,7 @@ impl MarketContract {
     }
 
     pub fn extend_deadline(env: Env, finder: Address, job_id: u64, extra_time: u64) {
+        assert!(!is_paused(&env), "Contract Paused");
         finder.require_auth();
 
         let mut job: Job = env
@@ -410,6 +425,7 @@ impl MarketContract {
     }
 
     pub fn increase_budget(env: Env, finder: Address, job_id: u64, added_amount: i128) {
+        assert!(!is_paused(&env), "Contract Paused");
         finder.require_auth();
 
         let mut job: Job = env
@@ -442,6 +458,7 @@ impl MarketContract {
     }
 
     pub fn transfer_admin(env: Env, old_admin: Address, new_admin: Address) {
+        assert!(!is_paused(&env), "Contract Paused");
         old_admin.require_auth();
 
         let current_admin = env
@@ -459,15 +476,25 @@ impl MarketContract {
     pub fn toggle_contract_pause(env: Env, admin: Address) {
         admin.require_auth();
 
-        let current_admin: Address = env.storage().instance().get(&DataKey::Admin).expect("Admin not set");
+        let current_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .expect("Admin not set");
         assert!(admin == current_admin, "Unauthorized caller");
 
-        let paused: bool = env.storage().instance().get(&DataKey::IsPaused).expect("Pause state not set");
+        let mut paused = env
+            .storage()
+            .instance()
+            .get(&DataKey::IsPaused)
+            .expect("Pause state not set");
 
         if paused {
             env.storage().instance().set(&DataKey::IsPaused, &false);
+            paused = false;
         } else {
             env.storage().instance().set(&DataKey::IsPaused, &true);
+            paused = true;
         }
 
         PauseStateChanged { paused }.publish(&env);
