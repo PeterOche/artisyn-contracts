@@ -626,6 +626,133 @@ fn test_complete_job_wrong_status() {
     market_client.complete_job(&artisan, &job_id);
 }
 
+#[test]
+fn test_raise_dispute_success_from_in_progress_by_finder() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (market_id, market_client, registry_id, registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+    let finder = Address::generate(&env);
+    let artisan = Address::generate(&env);
+
+    registry_client.initialize(&admin);
+
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+    token_admin_client.mint(&finder, &1000);
+
+    seed_artisan_profile(&env, &registry_id, &artisan, 3);
+
+    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    market_client.assign_artisan(&finder, &job_id, &artisan);
+    market_client.start_job(&artisan, &job_id);
+
+    market_client.raise_dispute(&finder, &job_id);
+
+    let events = env.events().all();
+    let market_event_count = events.iter().filter(|e| e.0 == market_id).count();
+    assert!(market_event_count >= 1);
+
+    let job: Job = env.as_contract(&market_id, || {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Job(job_id))
+            .expect("Job not found")
+    });
+    assert_eq!(job.status, JobStatus::Disputed);
+}
+
+#[test]
+fn test_raise_dispute_success_from_pending_review_by_artisan() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (market_id, market_client, registry_id, registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+    let finder = Address::generate(&env);
+    let artisan = Address::generate(&env);
+
+    registry_client.initialize(&admin);
+
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+    token_admin_client.mint(&finder, &1000);
+
+    seed_artisan_profile(&env, &registry_id, &artisan, 3);
+
+    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    market_client.assign_artisan(&finder, &job_id, &artisan);
+    market_client.start_job(&artisan, &job_id);
+    market_client.complete_job(&artisan, &job_id);
+
+    market_client.raise_dispute(&artisan, &job_id);
+
+    let events = env.events().all();
+    let market_event_count = events.iter().filter(|e| e.0 == market_id).count();
+    assert!(market_event_count >= 1);
+
+    let job: Job = env.as_contract(&market_id, || {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Job(job_id))
+            .expect("Job not found")
+    });
+    assert_eq!(job.status, JobStatus::Disputed);
+}
+
+#[test]
+#[should_panic(expected = "Only the finder or assigned artisan can raise a dispute")]
+fn test_raise_dispute_unauthorized_user() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (_, market_client, registry_id, registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+    let finder = Address::generate(&env);
+    let artisan = Address::generate(&env);
+    let random_user = Address::generate(&env);
+
+    registry_client.initialize(&admin);
+
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+    token_admin_client.mint(&finder, &1000);
+
+    seed_artisan_profile(&env, &registry_id, &artisan, 3);
+
+    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    market_client.assign_artisan(&finder, &job_id, &artisan);
+    market_client.start_job(&artisan, &job_id);
+
+    market_client.raise_dispute(&random_user, &job_id);
+}
+
+#[test]
+#[should_panic(expected = "Job cannot be disputed in its current status")]
+fn test_raise_dispute_wrong_status() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (_, market_client, registry_id, registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+    let finder = Address::generate(&env);
+    let artisan = Address::generate(&env);
+
+    registry_client.initialize(&admin);
+
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+    token_admin_client.mint(&finder, &1000);
+
+    seed_artisan_profile(&env, &registry_id, &artisan, 3);
+
+    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    market_client.assign_artisan(&finder, &job_id, &artisan);
+
+    market_client.raise_dispute(&finder, &job_id);
+}
+
 fn create_job_in_pending_review(
     env: &Env,
     market_id: &Address,

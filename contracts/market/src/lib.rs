@@ -102,6 +102,12 @@ pub struct FundsReleased {
 }
 
 #[contractevent]
+pub struct DisputeRaised {
+    pub id: u64,
+    pub raised_by: Address,
+}
+
+#[contractevent]
 pub struct DeadlineExtended {
     pub id: u64,
     pub extra_time: u64,
@@ -335,6 +341,33 @@ impl MarketContract {
         JobCompleted {
             id: job_id,
             artisan,
+        }
+        .publish(&env);
+    }
+
+    pub fn raise_dispute(env: Env, caller: Address, job_id: u64) {
+        caller.require_auth();
+
+        let mut job: Job = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Job(job_id))
+            .expect("Job not found");
+
+        if &job.finder != &caller && job.artisan.as_ref() != Some(&caller) {
+            panic!("Only the finder or assigned artisan can raise a dispute");
+        }
+
+        if job.status != JobStatus::InProgress && job.status != JobStatus::PendingReview {
+            panic!("Job cannot be disputed in its current status");
+        }
+
+        job.status = JobStatus::Disputed;
+        env.storage().persistent().set(&DataKey::Job(job_id), &job);
+
+        DisputeRaised {
+            id: job_id,
+            raised_by: caller,
         }
         .publish(&env);
     }
